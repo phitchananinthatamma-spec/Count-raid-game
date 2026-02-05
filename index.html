@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>COUNT RAID</title>
+<style>
+body{
+  margin:0;
+  background:#000;
+  color:#e0e0e0;
+  font-family:sans-serif;
+  text-align:center;
+}
+.box{
+  max-width:420px;
+  margin:30px auto;
+  padding:20px;
+  background:#111;
+  border-radius:15px;
+  box-shadow:0 0 20px #00ffc3;
+}
+input,button{
+  width:90%;
+  padding:10px;
+  margin:8px;
+  border-radius:8px;
+  border:none;
+  font-size:16px;
+}
+button{
+  background:#00c9a7;
+  color:#000;
+  font-weight:bold;
+}
+.score{font-size:18px;margin:5px}
+.question{font-size:20px;margin:15px}
+.emoji{font-size:28px}
+</style>
+</head>
+
+<body>
+
+<div class="box" id="lobby">
+  <h1>🎮 COUNT RAID</h1>
+  <div class="emoji">🧮⚔️⭐</div>
+  <input id="playerName" placeholder="ชื่อผู้เล่น">
+  <input id="roomId" placeholder="รหัสห้อง (4 ตัว)">
+  <input id="maxPlayers" type="number" value="5" min="2" max="5">
+  <button onclick="createRoom()">➕ สร้างห้อง</button>
+  <button onclick="joinRoom()">➡️ เข้าห้อง</button>
+</div>
+
+<div class="box" id="game" style="display:none">
+  <div id="timer">⏱ 30</div>
+  <div class="question" id="question"></div>
+  <input id="answer" placeholder="คำตอบ">
+  <button onclick="submitAnswer()">ส่งคำตอบ</button>
+  <div id="scores"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+import { getDatabase, ref, set, get, update, onValue, push } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAScwLSlNF1i0cAAT-xadJTFOgGUEsIilk",
+  authDomain: "count-raid-game.firebaseapp.com",
+  databaseURL: "https://count-raid-game-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "count-raid-game",
+  storageBucket: "count-raid-game.firebasestorage.app",
+  messagingSenderId: "887793946867",
+  appId: "1:887793946867:web:14c0c60399fcefc8612786"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let room="", name="", playerId="", correctAnswer=0, answered=false, time=30;
+
+function randomQuestion(){
+  let n= Math.floor(Math.random()*5)+3;
+  let r= Math.floor(Math.random()*3)+2;
+  correctAnswer = Math.pow(n,r);
+  return `ถ้ามี ${n} ตัวเลือก เลือกได้ ${r} ครั้ง มีกี่วิธี?`;
+}
+
+window.createRoom = async ()=>{
+  name = playerName.value.trim();
+  if(!name) return alert("ใส่ชื่อก่อน");
+  room = roomId.value || Math.random().toString(36).substring(2,6);
+  playerId = Date.now();
+  await set(ref(db,`rooms/${room}`),{
+    max:maxPlayers.value,
+    time:30,
+    started:true,
+    question: randomQuestion(),
+    answer: correctAnswer,
+    players:{}
+  });
+  joinRoom();
+};
+
+window.joinRoom = async ()=>{
+  name = playerName.value.trim();
+  if(!name) return alert("ใส่ชื่อก่อน");
+  room = roomId.value;
+  playerId = Date.now();
+  const roomRef = ref(db,`rooms/${room}`);
+  const snap = await get(roomRef);
+  if(!snap.exists()) return alert("ไม่พบห้อง");
+  await update(ref(db,`rooms/${room}/players/${playerId}`),{
+    name, score:0
+  });
+  startGame();
+};
+
+function startGame(){
+  lobby.style.display="none";
+  game.style.display="block";
+
+  const roomRef = ref(db,`rooms/${room}`);
+  onValue(roomRef,(snap)=>{
+    const data=snap.val();
+    question.innerText=data.question;
+    renderScores(data.players);
+  });
+
+  countdown();
+}
+
+function renderScores(players){
+  scores.innerHTML="<h3>📊 คะแนน</h3>";
+  for(let id in players){
+    scores.innerHTML+=`<div class="score">${players[id].name}: ${players[id].score}</div>`;
+  }
+}
+
+function countdown(){
+  if(time<=0) return;
+  timer.innerText="⏱ "+time;
+  time--;
+  setTimeout(countdown,1000);
+}
+
+window.submitAnswer = async ()=>{
+  if(answered) return;
+  answered=true;
+  const val=parseInt(answer.value);
+  let delta = (val===correctAnswer)?10:-5;
+  if(val===correctAnswer) delta+=5;
+  await update(ref(db,`rooms/${room}/players/${playerId}`),{
+    score: (await get(ref(db,`rooms/${room}/players/${playerId}/score`))).val()+delta
+  });
+  alert(`เฉลย: ${correctAnswer}`);
+};
+</script>
+</body>
+</html>
